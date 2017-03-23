@@ -3,13 +3,20 @@ package footbalisto
 import akka.actor.ActorSystem
 import akka.event.Logging
 import akka.http.scaladsl.Http
+import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
 import akka.http.scaladsl.model.{HttpEntity, _}
 import akka.http.scaladsl.server.Directives._
 import akka.stream.ActorMaterializer
 import com.typesafe.config.ConfigFactory
 import footbalisto.Database.Person
+import spray.json.{DefaultJsonProtocol, PrettyPrinter}
 
-object FootbalistoService extends App {
+trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol {
+  implicit val printer = PrettyPrinter
+  implicit val personFormat = jsonFormat3(Person)
+}
+
+object FootbalistoService extends App with JsonSupport {
 
   implicit val system = ActorSystem()
   implicit val executor = system.dispatcher
@@ -29,7 +36,7 @@ object FootbalistoService extends App {
       path("world") {
         get {
           complete {
-            Database.findPersonByAge(30).map(persons => persons.mkString(","))
+            Database.findPersonByAge(30)
           }
         }
       }
