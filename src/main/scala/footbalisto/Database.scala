@@ -1,5 +1,6 @@
 package footbalisto
 
+import footbalisto.domain.{Model, Ranking}
 import reactivemongo.api.MongoConnection.ParsedURI
 import reactivemongo.api.collections.bson.BSONCollection
 import reactivemongo.api.{DefaultDB, MongoConnection, MongoDriver}
@@ -26,8 +27,6 @@ object Database {
 
   def db1: Future[DefaultDB] = futureConnection.flatMap(_.database("firstdb"))
 
-  def db2: Future[DefaultDB] = futureConnection.flatMap(_.database("anotherdb"))
-
   def personCollection: Future[BSONCollection] = db1.map(_.collection("person"))
 
   // Write Documents: insert or update
@@ -50,6 +49,10 @@ object Database {
     personCollection.flatMap(_.update(selector, person).map(_.n))
   }
 
+  def deleteAllPersons = {
+    personCollection.flatMap(_.drop(false))
+  }
+
   implicit def personReader: BSONDocumentReader[Person] = Macros.reader[Person]
 
   // or provide a custom one
@@ -63,5 +66,10 @@ object Database {
 
   // Custom persistent types
   case class Person(firstName: String, lastName: String, age: Int)
+
+  def insert[T <: Model](entity: T)(implicit writer: BSONDocumentWriter[T]) = {
+    val collection: Future[BSONCollection] = db1.map(_.collection(entity.collection))
+    collection.flatMap(_.insert(entity).map(_ => {}))
+  }
 
 }

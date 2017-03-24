@@ -9,6 +9,8 @@ import akka.http.scaladsl.server.Directives._
 import akka.stream.ActorMaterializer
 import com.typesafe.config.ConfigFactory
 import footbalisto.Database.Person
+import footbalisto.domain.Ranking
+import footbalisto.domain.Ranking._
 import spray.json.{DefaultJsonProtocol, PrettyPrinter}
 
 trait JsonSupport extends SprayJsonSupport with DefaultJsonProtocol {
@@ -25,7 +27,10 @@ object FootbalistoService extends App with JsonSupport {
   val config = ConfigFactory.load()
   val logger = Logging(system, getClass)
 
+  Database.deleteAllPersons
   Database.createPerson(Person("pieter", "van geel", 30))
+
+  Database.insert(Ranking("id", "season", "level", "province"))
 
   val route =
     path("hello") {
