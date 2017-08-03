@@ -4,4 +4,5 @@ trait Model {
 
   def collection: String
 
+
 }
