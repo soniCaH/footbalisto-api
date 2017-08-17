@@ -199,9 +199,13 @@ class ImportService @Inject()(reactiveMongoApi: ReactiveMongoApi,
   val interval: FiniteDuration = config.getDuration("polling.interval")
   Logger.info(s"scheduling polling interval to $interval")
 
+  var delay: Int = 0
+
   regionService.regions.foreach { region: Region =>
-    system.scheduler.schedule(Duration.Zero, interval, importActorRef, ImportRankings(region))
-    system.scheduler.schedule(Duration.Zero, interval, importActorRef, ImportMatches(region))
+    system.scheduler.schedule(delay * 10 seconds, interval, importActorRef, ImportRankings(region))
+    system.scheduler.schedule((delay * 10 + 10) seconds, interval, importActorRef, ImportMatches(region))
+
+    delay = delay + 1
 
   }
 
