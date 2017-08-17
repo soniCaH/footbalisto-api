@@ -1,21 +1,27 @@
-name := "footbalisto-api"
+name := """footbalisto-api"""
+organization := "footbalisto"
 
-version := "1.0"
+version := "1.0-SNAPSHOT"
 
-scalaVersion := "2.12.1"
+lazy val root = (project in file(".")).enablePlugins(PlayScala)
 
-val akkaVersion = "10.0.5"
+scalaVersion := "2.12.2"
+
 
 libraryDependencies ++= Seq(
-  "com.typesafe.akka" %% "akka-http" % akkaVersion,
-  "com.typesafe.akka" %% "akka-http-testkit" % akkaVersion,
-  "com.typesafe.akka" %% "akka-http-spray-json" % akkaVersion,
+  guice, ws,
+  "org.reactivemongo" %% "play2-reactivemongo" % "0.12.5-play26",
+//  "commons-io" % "commons-io" % "2.5",
   "com.typesafe.akka" %% "akka-stream-contrib" % "0.6",
-
-  "org.reactivemongo" %% "reactivemongo" % "0.12.1",
-  "org.reactivemongo" %% "reactivemongo-akkastream" % "0.12.2",
-  "org.slf4j" % "slf4j-simple" % "1.7.25",
-
-  "joda-time" % "joda-time" % "2.9.9",
-  "ch.megard" %% "akka-http-cors" % "0.2.1"
+  "org.scalatestplus.play" %% "scalatestplus-play" % "3.1.0" % Test
 )
+
+
+
+// Adds additional packages into Twirl
+//TwirlKeys.templateImports += "footbalisto.controllers._"
+
+// Adds additional packages into conf/routes
+// play.sbt.routes.RoutesKeys.routesImport += "footbalisto.binders._"
+
+routesGenerator := InjectedRoutesGenerator

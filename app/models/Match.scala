@@ -1,6 +1,6 @@
-package footbalisto.domain
+package models
 
-import reactivemongo.bson.{BSONDocumentReader, BSONDocumentWriter, Macros}
+import reactivemongo.bson.{BSONDocumentReader, Macros}
 
 case class Match(
                   season: String,
@@ -15,16 +15,8 @@ case class Match(
                   matchDay: Int,
                   regNumberHome: Int,
                   regNumberAway: Int
-                ) extends Model {
+                ) {
 
-
-  override def collection: String = this.getClass.getSimpleName
-}
-
-object Match {
-
-  implicit def rankingWriter: BSONDocumentWriter[Match] = Macros.writer[Match]
-
-  implicit def rankingReader: BSONDocumentReader[Match] = Macros.reader[Match]
+  implicit def matchReader: BSONDocumentReader[Match] = Macros.reader[Match]
 }
 

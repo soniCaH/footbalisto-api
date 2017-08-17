@@ -1,0 +1,20 @@
+# Routes
+# This file defines all application routes (Higher priority routes first)
+# https://www.playframework.com/documentation/latest/ScalaRouting
+# ~~~~
+
+# An example controller showing a sample home page
+GET         /                                                          controllers.HomeController.index
+
+GET         /seasons                                                    controllers.ApiController.seasons()
+GET         /seasons/:season/regions                                   controllers.ApiController.regions(season)
+GET         /seasons/:season/regions/:region/rankings                  controllers.ApiController.availableRankingsForRegion(season, region)
+GET         /seasons/:season/regions/:region/rankings/:division        controllers.ApiController.rankings(season, region, division)
+GET         /seasons/:season/regions/:region/matches/:division         controllers.ApiController.matches(season, region, division)
+
+POST        /test/test                                                 controllers.ApiController.test()
+#POST        /test/:region                                              controllers.ApiController.importMatches(region)
+
+
+# Map static resources from the /public folder to the /assets URL path
+GET         /assets/*file                                              controllers.Assets.versioned(path="/public", file: Asset)

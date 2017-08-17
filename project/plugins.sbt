@@ -1,3 +1,1 @@
-logLevel := Level.Warn
-
-addSbtPlugin("io.spray" % "sbt-revolver" % "0.8.0")
+addSbtPlugin("com.typesafe.play" % "sbt-plugin" % "2.6.1")

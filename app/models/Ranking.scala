@@ -1,8 +1,6 @@
-package footbalisto.domain
+package models
 
-import akka.http.scaladsl
-//import akka.http.scaladsl.model
-import reactivemongo.bson.{BSONDocumentReader, BSONDocumentWriter, Macros}
+import reactivemongo.bson.{BSONDocumentReader, Macros}
 
 case class Ranking(
                     season: String,
@@ -18,17 +16,12 @@ case class Ranking(
                     goalsAgainst: Int,
                     points: Int,
                     period: Int
-                  ) extends Model {
-  override def collection = this.getClass.getSimpleName
+                  ) {
+
+
 }
 
-
 object Ranking {
-
-  implicit def collectionProvider: Model => String = _ => "ranking"
-
-  implicit def rankingWriter: BSONDocumentWriter[Ranking] = Macros.writer[Ranking]
-
   implicit def rankingReader: BSONDocumentReader[Ranking] = Macros.reader[Ranking]
 }
 
