@@ -1,4 +1,4 @@
-@()
+@(baseUrl: String)
 
 
 <!DOCTYPE html>
@@ -77,7 +77,7 @@
 
         <script lang="javascript">
 
-    var HOST = 'http://localhost:9000';
+                var HOST = '@baseUrl';
     var app = angular.module("footbalisto", []);
     app.controller("mainController", function ($scope, $http) {
         $scope.reset = function () {
