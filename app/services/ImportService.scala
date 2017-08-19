@@ -44,12 +44,6 @@ class ImportService @Inject()(reactiveMongoApi: ReactiveMongoApi,
 
   type UpsertSelector[T] = T => BSONDocument
 
-
-  implicit def upsertSelectorGenerator(entity: Ranking): UpsertSelector[Ranking] = {
-    ImportActor.rankingUpsortSelector
-  }
-
-
   def importEntities[T](region: Region, mongoService: MongoService[T], lineToEntity: (Array[String]) => T, buildResourceUrl: Region => String)(implicit writer: reactivemongo.bson.BSONDocumentWriter[T], upsertSelector: UpsertSelector[T]) = {
     val temporaryFile = temporaryFileCreator.create("filename", "tmp")
     val url = buildResourceUrl(region)
