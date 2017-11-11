@@ -1,19 +1,24 @@
 package controllers
 
+import java.util.Date
 import javax.inject.{Inject, Singleton}
 
 import akka.stream.Materializer
+import akka.stream.scaladsl.{FileIO, Sink}
+import akka.util.ByteString
 import models.{InputFile, Match, Ranking, Region}
+import org.joda.time.DateTime
+import play.api.http.HttpEntity
 import play.api.libs.Files.DefaultTemporaryFileCreator
 import play.api.libs.json.Json
 import play.api.libs.ws._
 import play.api.mvc._
 import play.modules.reactivemongo.{ReactiveMongoApi, ReactiveMongoComponents}
-import reactivemongo.bson.BSONDocumentHandler
 import reactivemongo.bson.Macros.handler
+import reactivemongo.bson.{BSONDocumentHandler, document}
 import services.{ImportService, MongoService, RegionService}
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future}
 
 trait JsonFormats {
   // Generates Writes and Reads for Feed and User thanks to Json Macros
@@ -49,7 +54,7 @@ class ApiController @Inject()(val reactiveMongoApi: ReactiveMongoApi,
   def availableRankingsForRegion(season: String, region: String): Action[AnyContent] = Action.async { implicit request: Request[AnyContent] =>
     rankingsDao.distinct(
       "division",
-      Option(reactivemongo.bson.document("season" -> season, "region" -> region))
+      Option(document("season" -> season, "region" -> region))
     ).map { s: List[String] =>
       Ok(Json.toJson(s))
     }
@@ -57,7 +62,7 @@ class ApiController @Inject()(val reactiveMongoApi: ReactiveMongoApi,
 
   def rankings(season: String, region: String, division: String): Action[AnyContent] = Action.async { implicit request: Request[AnyContent] =>
     rankingsDao.find(
-      reactivemongo.bson.document("season" -> season, "region" -> region, "division" -> division)
+      document("season" -> season, "region" -> region, "division" -> division)
     ).map { rankings: Seq[Ranking] =>
       Ok(Json.toJson(rankings))
     }
@@ -66,13 +71,13 @@ class ApiController @Inject()(val reactiveMongoApi: ReactiveMongoApi,
   def availablePeriodsForDivision(season: String, region: String, division: String): Action[AnyContent] = Action.async {
     rankingsDao.distinct(
       "period",
-      Option(reactivemongo.bson.document("season" -> season, "region" -> region, "division" -> division))
+      Option(document("season" -> season, "region" -> region, "division" -> division))
     ).map { s: List[String] => Ok(Json.toJson(s)) }
   }
 
   def rankingForDivisionAndPeriod(season: String, region: String, division: String, period: String): Action[AnyContent] = Action.async { implicit request: Request[AnyContent] =>
     rankingsDao.find(
-      reactivemongo.bson.document("season" -> season, "region" -> region, "division" -> division, "period" -> period)
+      document("season" -> season, "region" -> region, "division" -> division, "period" -> period)
     ).map { rankings: Seq[Ranking] =>
       Ok(Json.toJson(rankings))
     }
@@ -80,7 +85,7 @@ class ApiController @Inject()(val reactiveMongoApi: ReactiveMongoApi,
 
   def matches(season: String, region: String, division: String): Action[AnyContent] = Action.async { implicit request: Request[AnyContent] =>
     matchesDao.find(
-      reactivemongo.bson.document("season" -> season, "region" -> region, "division" -> division)
+      document("season" -> season, "region" -> region, "division" -> division)
     ).map { rankings: Seq[Match] =>
       Ok(Json.toJson(rankings))
     }
@@ -90,4 +95,70 @@ class ApiController @Inject()(val reactiveMongoApi: ReactiveMongoApi,
     Ok(Json.toJson(regionService.regions))
   }
 
+  def previousMatches(season: String, regNumber: String) = Action.async { implicit request: Request[AnyContent] =>
+    matchesDao.find(
+      document("season" -> season, "$or" -> reactivemongo.bson.array(
+        document("regNumberHome" -> regNumber),
+        document("regNumberAway" -> regNumber)
+      ))
+    ).map { rankings: Seq[Match] =>
+
+      val previousMatches = rankings.groupBy(_.division).flatMap { case (division, matches) =>
+        matches.filter { m =>
+          val now = new Date()
+          (m.dateTime before now) && (m.dateTime after new DateTime(now).minusMonths(1).toDate)
+        }.sortBy(-_.dateTime.getTime).headOption
+      }
+      Ok(Json.toJson(previousMatches))
+    }
+  }
+
+  def upcomingMatches(season: String, regNumber: String) = Action.async { implicit request: Request[AnyContent] =>
+    matchesDao.find(
+      document("season" -> season, "$or" -> reactivemongo.bson.array(
+        document("regNumberHome" -> regNumber),
+        document("regNumberAway" -> regNumber)
+      ))
+    ).map { rankings: Seq[Match] =>
+
+      val previousMatches = rankings.groupBy(_.division).flatMap { case (division, matches) =>
+        matches.filter { m =>
+          m.dateTime after new Date()
+        }.sortBy(_.dateTime.getTime).headOption
+      }
+      Ok(Json.toJson(previousMatches))
+    }
+  }
+
+  def logo(regNumber: String) = Action.async { implicit request: Request[AnyContent] =>
+
+    val tempFile = new java.io.File(s"logo/$regNumber.jpeg")
+
+    if (tempFile.exists()) {
+      val source = FileIO.fromPath(tempFile.toPath)
+      Future(Result(
+        header = ResponseHeader(200, Map.empty),
+        body = HttpEntity.Streamed(source, None, Some("image/jpeg"))
+      ))
+
+    } else {
+      tempFile.getParentFile.mkdirs()
+
+      val url = s"http://static.belgianfootball.be/project/publiek/clublogo/$regNumber.jpg"
+      ws.url(url).get().flatMap { response: WSResponse =>
+        val outputStream = java.nio.file.Files.newOutputStream(tempFile.toPath)
+        // The sink that writes to the output stream
+        val sink = Sink.foreach[ByteString] { bytes =>
+          outputStream.write(bytes.toArray)
+        }
+        response.bodyAsSource.runWith(sink)
+      }.map { done =>
+        val source = FileIO.fromPath(tempFile.toPath)
+        Result(
+          header = ResponseHeader(200, Map.empty),
+          body = HttpEntity.Streamed(source, None, Some("image/jpeg"))
+        )
+      }
+    }
+  }
 }
