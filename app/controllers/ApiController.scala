@@ -91,6 +91,35 @@ class ApiController @Inject()(val reactiveMongoApi: ReactiveMongoApi,
     }
   }
 
+  def matchesForMatchDay(season: String, region: String, division: String, matchDay: Long): Action[AnyContent] = Action.async { implicit request: Request[AnyContent] =>
+
+    matchesDao.find(
+      document("season" -> season, "region" -> region, "division" -> division, "matchDay" -> matchDay)
+    ).map { rankings: Seq[Match] =>
+      Ok(Json.toJson(rankings))
+    }
+  }
+
+  def matchesForTeamMatchDay(season: String, region: String, division: String, regNumber: String): Action[AnyContent] = Action.async { implicit request: Request[AnyContent] =>
+
+    matchesDao.find(
+      document(
+        "season" -> season,
+        "region" -> region,
+        "division" -> division,
+      )
+    ).map { matches: Seq[Match] =>
+      val matchesForNextMatchday = matches
+        .filter { m => m.regNumberHome == regNumber || m.regNumberAway == regNumber }
+        .filter { m => m.dateTime after new Date() }
+        .sortBy(_.dateTime.getTime).headOption.map(_.matchDay)
+        .map { matchDay =>
+          matches.filter(_.matchDay == matchDay)
+        }
+      Ok(Json.toJson(matchesForNextMatchday))
+    }
+  }
+
   def regions(season: String) = Action {
     Ok(Json.toJson(regionService.regions))
   }
