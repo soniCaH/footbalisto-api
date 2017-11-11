@@ -29,7 +29,7 @@ object Match {
     }
 
     Match(
-      season = "1617",
+      season = "1718",
       region = region.shortName,
       division = line(0).trim(),
       //dateTime = DateTimeFormat.forPattern("dd/MM/yyyy HH:mm").parseDateTime(s"${line(1)} ${line(2)}"),

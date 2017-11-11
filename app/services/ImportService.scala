@@ -35,7 +35,6 @@ import scala.util.{Failure, Success, Try}
 class ImportService @Inject()(reactiveMongoApi: ReactiveMongoApi,
                               ws: WSClient,
                               temporaryFileCreator: DefaultTemporaryFileCreator,
-                              //                              initService: InitService,
                               system: ActorSystem,
                               config: Config,
                               regionService: RegionService,
@@ -65,7 +64,6 @@ class ImportService @Inject()(reactiveMongoApi: ReactiveMongoApi,
           case result =>
             // Close the output stream whether there was an error or not
             digestOutputStream.close()
-            //            outputStream.close()
             // Get the result or rethrow the error
             result.get
         }.map(_ => (temporaryFile, Hex.encodeHexString(digest.digest())))
@@ -75,7 +73,7 @@ class ImportService @Inject()(reactiveMongoApi: ReactiveMongoApi,
       new MongoService[InputFile](reactiveMongoApi.database, "inputfiles").count(bson.document(
         "sha256Hash" -> sha256Hash
       )).map {
-        case 0 => importFile(tempFile, sha256Hash, url)
+        case 0 => importFile(tempFile, sha256Hash)
         case 1 => Future {
           Logger.info(s"ignoring file with hash $sha256Hash")
         }
@@ -84,17 +82,13 @@ class ImportService @Inject()(reactiveMongoApi: ReactiveMongoApi,
         }
       }
     }.onComplete {
-      case Success(_) => Logger.info("all is good")
-      case Failure(e) => Logger.error("something wrong", e)
+      case Success(_) =>
+      case Failure(e) => Logger.error("Something went wrong", e)
     }
 
-    def importFile(temporaryFile: TemporaryFile, sha256Hash: String, url: String): Unit = {
-      Logger.info("importing")
-      val start = System.currentTimeMillis()
-
+    def importFile(temporaryFile: TemporaryFile, sha256Hash: String): Unit = {
       val bytesSource: Source[ByteString, Future[IOResult]] = FileIO.fromPath(temporaryFile.path)
 
-      //TODO upload the file
       val mongo = new MongoService[InputFile](reactiveMongoApi.database, "inputfiles")
       val inputFile = InputFile(url, mongoService.collectionType, sha256Hash)
 
@@ -109,7 +103,7 @@ class ImportService @Inject()(reactiveMongoApi: ReactiveMongoApi,
 
       ZipInputStreamSource(() => new ZipInputStream(is)).map {
         case (_: ZipEntryData, byteString: ByteString) => byteString
-      }.via(Framing.delimiter(ByteString("\n"), 1024)).drop(1).map(_.utf8String).runForeach { csvLine =>
+      }.via(Framing.delimiter(ByteString("\n"), 1024)).drop(1).map(_.decodeString("Windows-1252")).runForeach { csvLine =>
         val line = csvLine.split(';')
         Try {
           lineToEntity(line)
@@ -123,41 +117,31 @@ class ImportService @Inject()(reactiveMongoApi: ReactiveMongoApi,
         case Success(_) => Logger.info("Processed the input file")
         case Failure(e) => Logger.error("Something went wrong", e)
       }
-
     }
   }
-
 
   def saveToGridFS(gridfs: GridFS[JSONSerializationPack.type],
                    filename: String,
                    contentType: Option[String],
                    data: Enumerator[Array[Byte]]
-                  ) = {
-    //          import reactivemongo.api.gridfs.Implicits._
+                  ): Future[Unit] = {
 
     // Prepare the GridFS object to the file to be pushed
     val gridfsObj: JSONFileToSave = JSONFileToSave(Option(filename), contentType)
     import play.modules.reactivemongo.MongoController
     import MongoController.readFileReads
     import reactivemongo.play.json._
-    //    import reactivemongo.play.json._
-
 
     val save: Future[gridfs.ReadFile[JsValue]] = gridfs.save(data, gridfsObj)
 
-    save.map { x => Logger.error(s"saved the input file:  $x") }
-
-    //    ???
+    save.map { x => Logger.info(s"saved the input file: $x") }
   }
 
   def ensureIndexes(): Future[Unit] = {
 
     def matchDao = new MongoService[Match](reactiveMongoApi.database, "matches")
-
-    //    implicit def inputFileCollection[Ranking]: CollectionName = "rankings"
     def rankingDao = new MongoService[Ranking](reactiveMongoApi.database, "rankings")
 
-    //["season", "region", "division", "matchDay", "home", "away", "regNumberHome", "regNumberAway"]
     rankingDao.ensureIndex(Seq(
       ("season", IndexType.Ascending),
       ("region", IndexType.Ascending),
@@ -178,17 +162,13 @@ class ImportService @Inject()(reactiveMongoApi: ReactiveMongoApi,
     ))
   }
 
-
   ensureIndexes()
 
   val importActorRef: ActorRef = system.actorOf(ImportActor.props(this, reactiveMongoApi))
-
-
   import scala.concurrent.duration._
 
   implicit def asFiniteDuration(d: java.time.Duration): FiniteDuration =
     scala.concurrent.duration.Duration.fromNanos(d.toNanos)
-
 
   val interval: FiniteDuration = config.getDuration("polling.interval")
   Logger.info(s"scheduling polling interval to $interval")
@@ -197,10 +177,8 @@ class ImportService @Inject()(reactiveMongoApi: ReactiveMongoApi,
 
   regionService.regions.foreach { region: Region =>
     system.scheduler.schedule(delay * 10 seconds, interval, importActorRef, ImportRankings(region))
-    system.scheduler.schedule((delay * 10 + 10) seconds, interval, importActorRef, ImportMatches(region))
-
+    system.scheduler.schedule((delay * 10 + 5) seconds, interval, importActorRef, ImportMatches(region))
     delay = delay + 1
-
   }
 
 
