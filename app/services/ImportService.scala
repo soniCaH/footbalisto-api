@@ -160,6 +160,14 @@ class ImportService @Inject()(reactiveMongoApi: ReactiveMongoApi,
       ("regNumberHome", IndexType.Ascending),
       ("regNumberAway", IndexType.Ascending)
     ))
+
+    matchDao.ensureIndex(Seq(
+      ("regNumberHome", IndexType.Ascending)
+    ))
+
+    matchDao.ensureIndex(Seq(
+      ("regNumberAway", IndexType.Ascending)
+    ))
   }
 
   ensureIndexes()
