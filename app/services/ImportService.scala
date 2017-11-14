@@ -140,6 +140,7 @@ class ImportService @Inject()(reactiveMongoApi: ReactiveMongoApi,
   def ensureIndexes(): Future[Unit] = {
 
     def matchDao = new MongoService[Match](reactiveMongoApi.database, "matches")
+
     def rankingDao = new MongoService[Ranking](reactiveMongoApi.database, "rankings")
 
     rankingDao.ensureIndex(Seq(
@@ -173,6 +174,7 @@ class ImportService @Inject()(reactiveMongoApi: ReactiveMongoApi,
   ensureIndexes()
 
   val importActorRef: ActorRef = system.actorOf(ImportActor.props(this, reactiveMongoApi))
+
   import scala.concurrent.duration._
 
   implicit def asFiniteDuration(d: java.time.Duration): FiniteDuration =
@@ -182,13 +184,20 @@ class ImportService @Inject()(reactiveMongoApi: ReactiveMongoApi,
   Logger.info(s"scheduling polling interval to $interval")
 
   var delay: Int = 0
-
-  regionService.regions.foreach { region: Region =>
-    system.scheduler.schedule(delay * 10 seconds, interval, importActorRef, ImportRankings(region))
-    system.scheduler.schedule((delay * 10 + 5) seconds, interval, importActorRef, ImportMatches(region))
-    delay = delay + 1
+  val spread: FiniteDuration = if (interval / regionService.regions.size > 10.seconds) {
+    10.seconds
+  }
+  else {
+    interval / regionService.regions.size
   }
 
+  regionService.regions.foreach { region: Region =>
+    val rankingsDelay = delay * spread
+    val matchesDelay = (delay * spread) + (spread / 2)
+    system.scheduler.schedule(rankingsDelay, interval, importActorRef, ImportRankings(region))
+    system.scheduler.schedule(matchesDelay, interval, importActorRef, ImportMatches(region))
+    delay = delay + 1
+  }
 
 
 }

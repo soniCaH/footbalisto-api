@@ -16,7 +16,8 @@ libraryDependencies ++= Seq(
   "org.scalatestplus.play" %% "scalatestplus-play" % "3.1.0" % Test
 )
 
-
+dockerUsername := Option("pvangeel")
+dockerEntrypoint := Seq(s"bin/${executableScriptName.value}", "-J-Xms64M", "-J-Xmx64M")
 
 // Adds additional packages into Twirl
 //TwirlKeys.templateImports += "footbalisto.controllers._"
