@@ -6,8 +6,9 @@ import javax.inject.{Inject, Singleton}
 import akka.stream.Materializer
 import akka.stream.scaladsl.{FileIO, Sink}
 import akka.util.ByteString
-import models.{InputFile, Match, Ranking, Region}
+import models._
 import org.joda.time.DateTime
+import play.api.Logger
 import play.api.http.HttpEntity
 import play.api.libs.Files.DefaultTemporaryFileCreator
 import play.api.libs.json.Json
@@ -16,7 +17,8 @@ import play.api.mvc._
 import play.modules.reactivemongo.{ReactiveMongoApi, ReactiveMongoComponents}
 import reactivemongo.bson.Macros.handler
 import reactivemongo.bson.{BSONDocumentHandler, document}
-import services.{ImportService, MongoService, RegionService}
+import security.Secured
+import services.{ImportService, MongoService, RegionService, UserService}
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -31,18 +33,20 @@ trait BsonFormats {
   implicit val matchHandler: BSONDocumentHandler[Match] = handler[Match]
   implicit val rankingHandler: BSONDocumentHandler[Ranking] = handler[Ranking]
   implicit val inputFileFormat: BSONDocumentHandler[InputFile] = handler[InputFile]
+  implicit val userFormat: BSONDocumentHandler[User] = handler[User]
 }
 
 @Singleton
 class ApiController @Inject()(val reactiveMongoApi: ReactiveMongoApi,
                               val cc: ControllerComponents,
                               regionService: RegionService,
+                              val userService: UserService,
                               ws: WSClient,
                               temporaryFileCreator: DefaultTemporaryFileCreator,
                               importService: ImportService,
                               implicit val mat: Materializer,
                               implicit val ec: ExecutionContext
-                             ) extends AbstractController(cc) with ReactiveMongoComponents with JsonFormats with BsonFormats {
+                             ) extends AbstractController(cc) with ReactiveMongoComponents with JsonFormats with BsonFormats with Secured {
 
   private val rankingsDao: MongoService[Ranking] = new MongoService[Ranking](reactiveMongoApi.database, "rankings")
   private val matchesDao: MongoService[Match] = new MongoService[Match](reactiveMongoApi.database, "matches")
@@ -86,8 +90,8 @@ class ApiController @Inject()(val reactiveMongoApi: ReactiveMongoApi,
   def matches(season: String, region: String, division: String): Action[AnyContent] = Action.async { implicit request: Request[AnyContent] =>
     matchesDao.find(
       document("season" -> season, "region" -> region, "division" -> division)
-    ).map { rankings: Seq[Match] =>
-      Ok(Json.toJson(rankings))
+    ).map { matches: Seq[Match] =>
+      Ok(Json.toJson(matches))
     }
   }
 
@@ -124,7 +128,7 @@ class ApiController @Inject()(val reactiveMongoApi: ReactiveMongoApi,
     Ok(Json.toJson(regionService.regions))
   }
 
-  def previousMatches(season: String, regNumber: String) = Action.async { implicit request: Request[AnyContent] =>
+  def previousMatches(season: String, regNumber: String): Action[AnyContent] = Action.async { implicit request: Request[AnyContent] =>
     matchesDao.find(
       document("season" -> season, "$or" -> reactivemongo.bson.array(
         document("regNumberHome" -> regNumber),
@@ -150,16 +154,16 @@ class ApiController @Inject()(val reactiveMongoApi: ReactiveMongoApi,
       ))
     ).map { rankings: Seq[Match] =>
 
-      val previousMatches = rankings.groupBy(_.division).flatMap { case (division, matches) =>
+      val upcomingMatches = rankings.groupBy(_.division).flatMap { case (division, matches) =>
         matches.filter { m =>
           m.dateTime after new Date()
         }.sortBy(_.dateTime.getTime).headOption
       }
-      Ok(Json.toJson(previousMatches))
+      Ok(Json.toJson(upcomingMatches))
     }
   }
 
-  def logo(regNumber: String) = Action.async { implicit request: Request[AnyContent] =>
+  def logo(regNumber: String): Action[AnyContent] = Action.async { implicit request: Request[AnyContent] =>
 
     val tempFile = new java.io.File(s"logo/$regNumber.jpeg")
 
@@ -190,4 +194,11 @@ class ApiController @Inject()(val reactiveMongoApi: ReactiveMongoApi,
       }
     }
   }
+
+  def authenticated(): EssentialAction = authenticatedRequest { request =>
+    Logger.info("in the authenticated request")
+    Ok("Authenticated")
+  }
+
+
 }
