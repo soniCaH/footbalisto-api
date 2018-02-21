@@ -18,6 +18,7 @@ GET        /seasons/:season/regions/:region/matches/:division/matchday/:matchDay
 
 GET        /seasons/:season/matches/previous/:regNumber                                 controllers.ApiController.previousMatches(season, regNumber)
 GET        /seasons/:season/matches/upcoming/:regNumber                                 controllers.ApiController.upcomingMatches(season, regNumber)
+GET        /seasons/:season/matches/calendar/:regNumber                                 controllers.ApiController.matchesCalendar(season: String, regNumber: String, side: String ?= "all")
 
 GET        /logo/:regNumber                                                             controllers.ApiController.logo(regNumber)
 

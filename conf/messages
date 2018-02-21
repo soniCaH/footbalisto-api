@@ -1,1 +1,8 @@
 # https://www.playframework.com/documentation/latest/ScalaI18N
+match.status.PP=Uitgesteld
+match.status.ST=Stopgezet
+match.status.AMC=Algemeen Forfait
+match.status.F1=Forfait
+match.status.FI=Forfait
+match.status.F2=Forfait beide ploegen
+match.status.FF=Forfait beide ploege

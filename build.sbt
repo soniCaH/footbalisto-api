@@ -13,6 +13,7 @@ libraryDependencies ++= Seq(
   "org.reactivemongo" %% "play2-reactivemongo" % "0.12.5-play26",
 //  "commons-io" % "commons-io" % "2.5",
   "com.typesafe.akka" %% "akka-stream-contrib" % "0.6",
+  "org.mnode.ical4j" % "ical4j" % "2.0.0",
   "org.scalatestplus.play" %% "scalatestplus-play" % "3.1.0" % Test
 )
 

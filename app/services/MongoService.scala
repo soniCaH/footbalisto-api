@@ -1,6 +1,5 @@
 package services
 
-import models.{InputFile, Ranking}
 import play.api.Logger
 import reactivemongo.api.collections.bson.BSONCollection
 import reactivemongo.api.indexes.{Index, IndexType}
@@ -29,6 +28,11 @@ class MongoService[T](database: Future[DefaultDB], val collectionType: String)(i
   }
 
   def upsert(selector: BSONDocument, entity: T)(implicit writer: BSONDocumentWriter[T]): Future[Unit] = {
+    val collection: Future[BSONCollection] = database.map(_.collection(collectionType))
+    collection.flatMap(_.update(selector, entity, upsert = true).map(_ => {}))
+  }
+
+  def test(selector: BSONDocument, entity: T)(implicit writer: BSONDocumentWriter[T]): Future[Unit] = {
     val collection: Future[BSONCollection] = database.map(_.collection(collectionType))
     collection.flatMap(_.update(selector, entity, upsert = true).map(_ => {}))
   }

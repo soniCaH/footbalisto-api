@@ -1,15 +1,18 @@
 package controllers
 
-import java.util.Date
+import java.util.{Date, UUID}
 import javax.inject.{Inject, Singleton}
 
 import akka.stream.Materializer
 import akka.stream.scaladsl.{FileIO, Sink}
 import akka.util.ByteString
 import models._
+import net.fortuna.ical4j.model.property.Uid
+import net.fortuna.ical4j.model.{Calendar, Dur}
 import org.joda.time.DateTime
 import play.api.Logger
 import play.api.http.HttpEntity
+import play.api.i18n.{Lang, Langs, MessagesApi}
 import play.api.libs.Files.DefaultTemporaryFileCreator
 import play.api.libs.json.Json
 import play.api.libs.ws._
@@ -37,7 +40,8 @@ trait BsonFormats {
 }
 
 @Singleton
-class ApiController @Inject()(val reactiveMongoApi: ReactiveMongoApi,
+class ApiController @Inject()(langs: Langs, messagesApi: MessagesApi,
+                              val reactiveMongoApi: ReactiveMongoApi,
                               val cc: ControllerComponents,
                               regionService: RegionService,
                               val userService: UserService,
@@ -134,9 +138,9 @@ class ApiController @Inject()(val reactiveMongoApi: ReactiveMongoApi,
         document("regNumberHome" -> regNumber),
         document("regNumberAway" -> regNumber)
       ))
-    ).map { rankings: Seq[Match] =>
+    ).map { matches: Seq[Match] =>
 
-      val previousMatches = rankings.groupBy(_.division).flatMap { case (division, matches) =>
+      val previousMatches = matches.groupBy(_.division).flatMap { case (division, matches) =>
         matches.filter { m =>
           val now = new Date()
           (m.dateTime before now) && (m.dateTime after new DateTime(now).minusMonths(1).toDate)
@@ -152,9 +156,9 @@ class ApiController @Inject()(val reactiveMongoApi: ReactiveMongoApi,
         document("regNumberHome" -> regNumber),
         document("regNumberAway" -> regNumber)
       ))
-    ).map { rankings: Seq[Match] =>
+    ).map { matches: Seq[Match] =>
 
-      val upcomingMatches = rankings.groupBy(_.division).flatMap { case (division, matches) =>
+      val upcomingMatches = matches.groupBy(_.division).flatMap { case (division, matches) =>
         matches.filter { m =>
           m.dateTime after new Date()
         }.sortBy(_.dateTime.getTime).headOption
@@ -192,6 +196,46 @@ class ApiController @Inject()(val reactiveMongoApi: ReactiveMongoApi,
           body = HttpEntity.Streamed(source, None, Some("image/jpeg"))
         )
       }
+    }
+  }
+
+  def matchesCalendar(season: String, regNumber: String, side: String) = Action.async { implicit request: Request[AnyContent] =>
+    val lang: Lang = langs.availables.head
+    val orQuery = side match {
+      case "home" => reactivemongo.bson.array(document("regNumberHome" -> regNumber))
+      case "away" => reactivemongo.bson.array(document("regNumberAway" -> regNumber))
+      case _ => reactivemongo.bson.array(document("regNumberHome" -> regNumber), document("regNumberAway" -> regNumber)
+      )
+    }
+    matchesDao.find(
+      document("season" -> season, "$or" -> orQuery)
+    ).map { matches: Seq[Match] =>
+      import net.fortuna.ical4j.model.component.VEvent
+      import net.fortuna.ical4j.model.property.{CalScale, ProdId, Version}
+
+      val calendar = new Calendar()
+      calendar.getProperties.add(new ProdId(s"-//Footbalisto//Upcoming matches for $regNumber//EN"))
+      calendar.getProperties.add(Version.VERSION_2_0)
+      calendar.getProperties.add(CalScale.GREGORIAN)
+
+      matches.foreach { m: Match =>
+        val summary = if (!m.status.isEmpty) {
+          s"[${m.division}] ${m.home} vs ${m.away} --- ${messagesApi(s"match.status.${m.status}")(lang)} ---"
+        } else {
+          (for {
+            resultHome <- m.resultHome
+            resultAway <- m.resultAway
+          } yield {
+            s"[${m.division}] ${m.home} [ $resultHome-$resultAway ] ${m.away}"
+          }).getOrElse(s"[${m.division}] ${m.home} vs ${m.away}")
+
+        }
+
+        val matchEvent = new VEvent(new net.fortuna.ical4j.model.DateTime(m.dateTime), new Dur("PT105M"), summary)
+        matchEvent.getProperties.add(new Uid(UUID.randomUUID().toString))
+        calendar.getComponents.add(matchEvent)
+      }
+      Ok(calendar.toString).as("text/calendar")
     }
   }
 
