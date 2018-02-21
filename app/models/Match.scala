@@ -1,7 +1,7 @@
 package models
 
 import java.text.SimpleDateFormat
-import java.util.Date
+import java.util.{Date, TimeZone}
 
 import reactivemongo.bson
 import reactivemongo.bson.{BSONDocument, BSONDocumentReader, Macros}
@@ -27,6 +27,7 @@ case class Match(
 object Match {
 
   val dateParser = new SimpleDateFormat("dd/MM/yyyy HH:mm")
+  dateParser.setTimeZone(TimeZone.getTimeZone("Europe/Brussels"))
 
   def lineToMatch(region: Region)(line: Array[String]): Match = {
     def safeStringToLong(str: String): Option[Int] = {
