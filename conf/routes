@@ -1,0 +1,27 @@
+# Routes
+# This file defines all application routes (Higher priority routes first)
+# https://www.playframework.com/documentation/latest/ScalaRouting
+# ~~~~
+
+# An example controller showing a sample home page
+GET        /                                                                            controllers.HomeController.index
+
+GET        /seasons                                                                     controllers.ApiController.seasons()
+GET        /seasons/:season/regions                                                     controllers.ApiController.regions(season)
+GET        /seasons/:season/regions/:region/rankings                                    controllers.ApiController.availableRankingsForRegion(season, region)
+GET        /seasons/:season/regions/:region/rankings/:division                          controllers.ApiController.rankings(season, region, division)
+GET        /seasons/:season/regions/:region/rankings/:division/periods                  controllers.ApiController.availablePeriodsForDivision(season, region, division)
+GET        /seasons/:season/regions/:region/rankings/:division/periods/:period          controllers.ApiController.rankingForDivisionAndPeriod(season, region, division, period)
+GET        /seasons/:season/regions/:region/matches/:division                           controllers.ApiController.matches(season, region, division)
+GET        /seasons/:season/regions/:region/matches/:division/team/:regNumber           controllers.ApiController.matchesForTeamMatchDay(season, region, division, regNumber)
+GET        /seasons/:season/regions/:region/matches/:division/matchday/:matchDay        controllers.ApiController.matchesForMatchDay(season, region, division, matchDay: Long)
+
+GET        /seasons/:season/matches/previous/:regNumber                                 controllers.ApiController.previousMatches(season, regNumber)
+GET        /seasons/:season/matches/upcoming/:regNumber                                 controllers.ApiController.upcomingMatches(season, regNumber)
+GET        /seasons/:season/matches/calendar/:regNumber                                 controllers.ApiController.matchesCalendar(season: String, regNumber: String, side: String ?= "all")
+
+GET        /logo/:regNumber                                                             controllers.ApiController.logo(regNumber)
+
+GET        /authenticated                                                               controllers.ApiController.authenticated()
+# Map static resources from the /public folder to the /assets URL path
+GET        /assets/*file                                                                controllers.Assets.versioned(path="/public", file: Asset)

@@ -1,0 +1,140 @@
+@(baseUrl: String)
+
+
+<!DOCTYPE html>
+<html>
+
+    <head>
+        <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0-alpha.6/css/bootstrap.min.css" integrity="sha384-rwoIResjU2yc3z8GV/NPeZWAv56rSmLldC3R/AZzGRnGxQQKnKkoFVhFQhNUwEyJ" crossorigin="anonymous">
+        <script src="https://ajax.googleapis.com/ajax/libs/angularjs/1.6.2/angular.js"></script>
+        @*<link rel="stylesheet" href="style.css"/>*@
+        @*<script src="script.js"></script>*@
+
+        <style>
+
+    </style>
+
+    </head>
+
+    <body ng-app="footbalisto">
+
+        <div class="container" ng-controller="mainController">
+            <h1 ng-click="reset()">Footbalisto</h1>
+            <div ng-show="!season">
+                <h2>Season</h2>
+
+                <ul class="list-group">
+                    <li ng-repeat="s in seasons" class="list-group-item" ng-click="setSeason(s)">
+                        <a href="#" ng-bind="s.name"></a>
+                    </li>
+                </ul>
+            </div>
+
+
+            <div ng-show="season && !region">
+                <h2>Season: <span ng-bind="season.name"></span></h2>
+
+                <ul class="list-group">
+                    <li ng-repeat="r in regions" class="list-group-item" ng-click="setRegion(r)">
+                        <a href="#" ng-bind="r.fullName"></a>
+                    </li>
+                </ul>
+
+            </div>
+
+            <div ng-show="region && !division">
+                <h2>Region: <span ng-bind="region.fullName"></span></h2>
+                <ul class="list-group">
+                    <li ng-repeat="division in divisions" class="list-group-item" ng-click="setDivision(division)">
+                        <a href="#" ng-bind="division"></a>
+                    </li>
+                </ul>
+
+            </div>
+
+            <div ng-show="rankings">
+                <table class="table">
+                    <tr>
+                        <th>Pos</th>
+                        <th>Team</th>
+                        <th>Win</th>
+                        <th>Lose</th>
+                        <th>Draw</th>
+                    </tr>
+                    <tr ng-repeat="ranking in rankings | orderBy:'position' ">
+                        <td>{{ranking.position}}</td>
+                        <td>{{ranking.team}}</td>
+                        <td>{{ranking.wins}}</td>
+                        <td>{{ranking.losses}}</td>
+                        <td>{{ranking.draws}}</td>
+                    </tr>
+                </table>
+
+            </div>
+
+        </div>
+
+
+        <script lang="javascript">
+
+                var HOST = '@baseUrl';
+    var app = angular.module("footbalisto", []);
+    app.controller("mainController", function ($scope, $http) {
+        $scope.reset = function () {
+            $scope.season = undefined;
+            $scope.region = undefined;
+            $scope.division = undefined;
+            $scope.seasons = [];
+            $scope.regions = [];
+            $scope.divisions = [];
+            $http.get(HOST + '/seasons').then(function (response) {
+                $scope.seasons = response.data;
+            });
+        };
+        $scope.reset();
+        $scope.setSeason = function (s) {
+            $scope.season = s;
+        };
+        $scope.setRegion = function (r) {
+            $scope.region = r;
+        };
+        $scope.setDivision = function (d) {
+            $scope.division = d;
+        };
+
+
+        $scope.$watch('season', function (newVal) {
+            if (!newVal) {
+                return;
+            }
+            $http.get(HOST + '/seasons/' + $scope.season.name + '/regions').then(function (response) {
+                $scope.regions = response.data;
+            })
+        });
+
+        $scope.$watch('region', function (newVal) {
+            if (!newVal) {
+                return;
+            }
+            $http.get(HOST + '/seasons/' + $scope.season.name + '/regions/' + $scope.region.shortName + '/rankings').then(function (response) {
+                $scope.divisions = response.data;
+            })
+        })
+
+        $scope.$watch('division', function (newVal) {
+            if (!newVal) {
+                return;
+            }
+            $http.get(HOST + '/seasons/' + $scope.season.name + '/regions/' + $scope.region.shortName + '/rankings/' + $scope.division).then(function (response) {
+                $scope.rankings = response.data;
+            })
+        })
+
+    });
+
+</script>
+
+    </body>
+
+</html>
+
