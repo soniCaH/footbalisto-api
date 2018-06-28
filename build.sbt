@@ -10,7 +10,7 @@ scalaVersion := "2.12.2"
 
 libraryDependencies ++= Seq(
   guice, ws,
-  "org.reactivemongo" %% "play2-reactivemongo" % "0.12.5-play26",
+  "org.reactivemongo" %% "play2-reactivemongo" % "0.13.0-play26",
 //  "commons-io" % "commons-io" % "2.5",
   "com.typesafe.akka" %% "akka-stream-contrib" % "0.6",
   "org.mnode.ical4j" % "ical4j" % "2.0.0",

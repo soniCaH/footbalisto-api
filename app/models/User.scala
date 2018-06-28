@@ -1,3 +1,6 @@
 package models
 
-case class User(username: String, token: String)
+
+case class Id($oid: String)
+
+case class User(_id: Option[Id], username: String, roles: List[String], token: String)

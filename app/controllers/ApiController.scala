@@ -1,11 +1,11 @@
 package controllers
 
 import java.util.{Date, UUID}
-import javax.inject.{Inject, Singleton}
 
 import akka.stream.Materializer
 import akka.stream.scaladsl.{FileIO, Sink}
 import akka.util.ByteString
+import javax.inject.{Inject, Singleton}
 import models._
 import net.fortuna.ical4j.model.property.Uid
 import net.fortuna.ical4j.model.{Calendar, Dur}
@@ -30,13 +30,16 @@ trait JsonFormats {
   implicit val rankingFormat = Json.format[Ranking]
   implicit val matchFormat = Json.format[Match]
   implicit val regionFormat = Json.format[Region]
+  implicit val idFormat = Json.format[Id]
+  implicit val userFormat = Json.format[User]
 }
 
 trait BsonFormats {
   implicit val matchHandler: BSONDocumentHandler[Match] = handler[Match]
   implicit val rankingHandler: BSONDocumentHandler[Ranking] = handler[Ranking]
   implicit val inputFileFormat: BSONDocumentHandler[InputFile] = handler[InputFile]
-  implicit val userFormat: BSONDocumentHandler[User] = handler[User]
+  implicit val idHandler: BSONDocumentHandler[Id] = handler[Id]
+  implicit val userHandler: BSONDocumentHandler[User] = handler[User]
 }
 
 @Singleton
@@ -61,8 +64,7 @@ class ApiController @Inject()(langs: Langs, messagesApi: MessagesApi,
 
   def availableRankingsForRegion(season: String, region: String): Action[AnyContent] = Action.async { implicit request: Request[AnyContent] =>
     rankingsDao.distinct(
-      "division",
-      Option(document("season" -> season, "region" -> region))
+      "division", Option(document("season" -> season, "region" -> region))
     ).map { s: List[String] =>
       Ok(Json.toJson(s))
     }
@@ -182,15 +184,15 @@ class ApiController @Inject()(langs: Langs, messagesApi: MessagesApi,
       tempFile.getParentFile.mkdirs()
 
       val url = s"http://static.belgianfootball.be/project/publiek/clublogo/$regNumber.jpg"
-      ws.url(url).get().flatMap { response: WSResponse =>
+
+      ws.url(url).get().map { response: WSResponse =>
         val outputStream = java.nio.file.Files.newOutputStream(tempFile.toPath)
-        // The sink that writes to the output stream
         val sink = Sink.foreach[ByteString] { bytes =>
           outputStream.write(bytes.toArray)
         }
-        response.bodyAsSource.runWith(sink)
-      }.map { done =>
-        val source = FileIO.fromPath(tempFile.toPath)
+        val source = response.bodyAsSource
+        source.runWith(sink)
+
         Result(
           header = ResponseHeader(200, Map.empty),
           body = HttpEntity.Streamed(source, None, Some("image/jpeg"))
@@ -239,10 +241,26 @@ class ApiController @Inject()(langs: Langs, messagesApi: MessagesApi,
     }
   }
 
-  def authenticated(): EssentialAction = authenticatedRequest { request =>
+  def authenticated(): EssentialAction = authenticatedRequest("Admin") { (request, user) =>
     Logger.info("in the authenticated request")
     Ok("Authenticated")
   }
 
 
+  def session() = authenticatedRequest() { (request, user) =>
+    Ok(Json.toJson(
+      user
+    ))
+
+  }
+
+  def users() = Action.async {
+
+    userService.findAll().map { users =>
+      Ok(Json.toJson(users))
+
+    }
+
+
+  }
 }

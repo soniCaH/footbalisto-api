@@ -3,7 +3,6 @@ package services
 import java.io.InputStream
 import java.security.{DigestOutputStream, MessageDigest}
 import java.util.zip.ZipInputStream
-import javax.inject.{Inject, Singleton}
 
 import actors.{ImportActor, ImportMatches, ImportRankings}
 import akka.actor.{ActorRef, ActorSystem}
@@ -14,7 +13,8 @@ import akka.stream.{IOResult, Materializer}
 import akka.util.ByteString
 import com.typesafe.config.Config
 import controllers.BsonFormats
-import models.{InputFile, Match, Ranking, Region}
+import javax.inject.{Inject, Singleton}
+import models._
 import org.apache.commons.codec.binary.Hex
 import play.api.Logger
 import play.api.libs.Files.{DefaultTemporaryFileCreator, TemporaryFile}
@@ -103,20 +103,23 @@ class ImportService @Inject()(reactiveMongoApi: ReactiveMongoApi,
 
       ZipInputStreamSource(() => new ZipInputStream(is)).map {
         case (_: ZipEntryData, byteString: ByteString) => byteString
-      }.via(Framing.delimiter(ByteString("\n"), 1024)).drop(1).map(_.decodeString("Windows-1252")).runForeach { csvLine =>
+      }.via(Framing.delimiter(ByteString("\n"), 1024)).drop(1).map(_.decodeString("Windows-1252")).mapAsyncUnordered(4) { csvLine =>
         val line = csvLine.split(';')
         Try {
           lineToEntity(line)
         }.map { entity =>
+          //          println("going to upsert")
           mongoService.upsert(upsertSelector(entity), entity)
         }.recover {
           case e =>
             Logger.error(e.getMessage, e)
-        }
-      }.onComplete {
-        case Success(_) => Logger.info("Processed the input file")
-        case Failure(e) => Logger.error("Something went wrong", e)
-      }
+            Future.failed(e)
+        }.get
+      }.runForeach(_ => Unit)
+      //        .onComplete {
+      //        case Success(_) => Logger.info("Processed the input file")
+      //        case Failure(e) => Logger.error("Something went wrong", e)
+      //      }
     }
   }
 
@@ -142,6 +145,10 @@ class ImportService @Inject()(reactiveMongoApi: ReactiveMongoApi,
     def matchDao = new MongoService[Match](reactiveMongoApi.database, "matches")
 
     def rankingDao = new MongoService[Ranking](reactiveMongoApi.database, "rankings")
+
+    def userDao = new MongoService[User](reactiveMongoApi.database, "users")
+
+    userDao.ensureIndex(Seq(("token", IndexType.Ascending)))
 
     rankingDao.ensureIndex(Seq(
       ("season", IndexType.Ascending),
@@ -171,32 +178,39 @@ class ImportService @Inject()(reactiveMongoApi: ReactiveMongoApi,
     ))
   }
 
-  ensureIndexes()
+  ensureIndexes().andThen { case Success(_) =>
+    if (config.getBoolean("polling.disabled")) {
+      Logger.info("Polling is disabled")
+    } else {
+      val importActorRef: ActorRef = system.actorOf(ImportActor.props(this, reactiveMongoApi))
 
-  val importActorRef: ActorRef = system.actorOf(ImportActor.props(this, reactiveMongoApi))
+      import scala.concurrent.duration._
 
-  import scala.concurrent.duration._
+      implicit def asFiniteDuration(d: java.time.Duration): FiniteDuration =
+        scala.concurrent.duration.Duration.fromNanos(d.toNanos)
 
-  implicit def asFiniteDuration(d: java.time.Duration): FiniteDuration =
-    scala.concurrent.duration.Duration.fromNanos(d.toNanos)
+      val interval: FiniteDuration = config.getDuration("polling.interval")
+      Logger.info(s"scheduling polling interval to $interval")
 
-  val interval: FiniteDuration = config.getDuration("polling.interval")
-  Logger.info(s"scheduling polling interval to $interval")
+      var delay: Int = 0
+      val spread: FiniteDuration = if (interval / regionService.regions.size > 10.seconds) {
+        10.seconds
+      }
+      else {
+        interval / regionService.regions.size
+      }
 
-  var delay: Int = 0
-  val spread: FiniteDuration = if (interval / regionService.regions.size > 10.seconds) {
-    10.seconds
-  }
-  else {
-    interval / regionService.regions.size
-  }
+      regionService.regions.foreach { region: Region =>
+        val rankingsDelay = delay * spread
+        val matchesDelay = (delay * spread) + (spread / 2)
+        system.scheduler.schedule(rankingsDelay, interval, importActorRef, ImportRankings(region))
+        system.scheduler.schedule(matchesDelay, interval, importActorRef, ImportMatches(region))
+        delay = delay + 1
+      }
 
-  regionService.regions.foreach { region: Region =>
-    val rankingsDelay = delay * spread
-    val matchesDelay = (delay * spread) + (spread / 2)
-    system.scheduler.schedule(rankingsDelay, interval, importActorRef, ImportRankings(region))
-    system.scheduler.schedule(matchesDelay, interval, importActorRef, ImportMatches(region))
-    delay = delay + 1
+
+    }
+  case e => Logger.error(s"failed to ensure indexes $e")
   }
 
 

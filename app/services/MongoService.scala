@@ -44,7 +44,10 @@ class MongoService[T](database: Future[DefaultDB], val collectionType: String)(i
 
   def ensureIndex(indexes: Seq[(String, IndexType)]): Future[Unit] = {
     val collection: Future[BSONCollection] = database.map(_.collection(collectionType))
-    collection.flatMap(_.indexesManager.ensure(Index(indexes))).map(a => {
+    //    collection.flatMap(_.indexesManager.ensure(Index(indexes))).map(a => {
+    //      Logger.info(s"ensured index for $collectionType: $a")
+    //    })
+    collection.flatMap(_.indexesManager.create(Index(indexes))).map(a => {
       Logger.info(s"ensured index for $collectionType: $a")
     })
   }
