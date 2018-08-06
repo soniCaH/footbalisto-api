@@ -19,7 +19,7 @@ import play.api.libs.ws._
 import play.api.mvc._
 import play.modules.reactivemongo.{ReactiveMongoApi, ReactiveMongoComponents}
 import reactivemongo.bson.Macros.handler
-import reactivemongo.bson.{BSONDocumentHandler, document}
+import reactivemongo.bson.{BSONDocumentHandler, BSONValue, document}
 import security.Secured
 import services.{ImportService, MongoService, RegionService, UserService}
 
@@ -201,16 +201,25 @@ class ApiController @Inject()(langs: Langs, messagesApi: MessagesApi,
     }
   }
 
-  def matchesCalendar(season: String, regNumber: String, side: String) = Action.async { implicit request: Request[AnyContent] =>
+  def matchesCalendar(season: String, regNumber: String, side: String, filterTeams: String) = Action.async { implicit request: Request[AnyContent] =>
     val lang: Lang = langs.availables.head
-    val orQuery = side match {
+    val orQuery: BSONValue = side match {
       case "home" => reactivemongo.bson.array(document("regNumberHome" -> regNumber))
       case "away" => reactivemongo.bson.array(document("regNumberAway" -> regNumber))
       case _ => reactivemongo.bson.array(document("regNumberHome" -> regNumber), document("regNumberAway" -> regNumber)
       )
     }
     matchesDao.find(
-      document("season" -> season, "$or" -> orQuery)
+      if (filterTeams.nonEmpty) {
+        document("season" -> season,
+          "$or" -> orQuery,
+          "division" -> document("$in" -> filterTeams.split(",").map(_.trim).filter {
+            _.length > 0
+          }))
+      } else {
+        document("season" -> season, "$or" -> orQuery)
+      }
+
     ).map { matches: Seq[Match] =>
       import net.fortuna.ical4j.model.component.VEvent
       import net.fortuna.ical4j.model.property.{CalScale, ProdId, Version}
