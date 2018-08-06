@@ -27,7 +27,7 @@ object Ranking {
 
   def lineToRanking(region: Region)(line: Array[String]): Ranking = {
     Ranking(
-      season = "1718",
+      season = "1819",
       region = region.shortName,
       division = line(0),
       position = line(1).toInt,

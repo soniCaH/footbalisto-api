@@ -22,11 +22,9 @@ import play.api.libs.iteratee.Enumerator
 import play.api.libs.json.JsValue
 import play.api.libs.ws.{WSClient, WSResponse}
 import play.modules.reactivemongo.{JSONFileToSave, ReactiveMongoApi}
-import reactivemongo.api.gridfs.GridFS
 import reactivemongo.api.indexes.IndexType
 import reactivemongo.bson
 import reactivemongo.bson.BSONDocument
-import reactivemongo.play.json.JSONSerializationPack
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
@@ -92,7 +90,7 @@ class ImportService @Inject()(reactiveMongoApi: ReactiveMongoApi,
       val mongo = new MongoService[InputFile](reactiveMongoApi.database, "inputfiles")
       val inputFile = InputFile(url, mongoService.collectionType, sha256Hash)
 
-      saveToGridFS(reactiveMongoApi.gridFS, inputFile.name, None, Enumerator.fromPath(temporaryFile.path))
+      saveToGridFS(inputFile.name, None, Enumerator.fromPath(temporaryFile.path))
 
       mongo.upsert(bson.document(
         "sha256Hash" -> inputFile.sha256Hash
@@ -123,11 +121,12 @@ class ImportService @Inject()(reactiveMongoApi: ReactiveMongoApi,
     }
   }
 
-  def saveToGridFS(gridfs: GridFS[JSONSerializationPack.type],
-                   filename: String,
+  def saveToGridFS(filename: String,
                    contentType: Option[String],
                    data: Enumerator[Array[Byte]]
                   ): Future[Unit] = {
+
+    val gridfs = reactiveMongoApi.gridFS
 
     // Prepare the GridFS object to the file to be pushed
     val gridfsObj: JSONFileToSave = JSONFileToSave(Option(filename), contentType)
@@ -140,7 +139,7 @@ class ImportService @Inject()(reactiveMongoApi: ReactiveMongoApi,
     save.map { x => Logger.info(s"saved the input file: $x") }
   }
 
-  def ensureIndexes(): Future[Unit] = {
+  def ensureIndexes(): Future[List[Unit]] = {
 
     def matchDao = new MongoService[Match](reactiveMongoApi.database, "matches")
 
@@ -150,7 +149,7 @@ class ImportService @Inject()(reactiveMongoApi: ReactiveMongoApi,
 
     userDao.ensureIndex(Seq(("token", IndexType.Ascending)))
 
-    rankingDao.ensureIndex(Seq(
+    val f1 = rankingDao.ensureIndex(Seq(
       ("season", IndexType.Ascending),
       ("region", IndexType.Ascending),
       ("division", IndexType.Ascending),
@@ -158,7 +157,7 @@ class ImportService @Inject()(reactiveMongoApi: ReactiveMongoApi,
       ("team", IndexType.Ascending)
     ))
 
-    matchDao.ensureIndex(Seq(
+    val f2 = matchDao.ensureIndex(Seq(
       ("season", IndexType.Ascending),
       ("region", IndexType.Ascending),
       ("division", IndexType.Ascending),
@@ -169,16 +168,19 @@ class ImportService @Inject()(reactiveMongoApi: ReactiveMongoApi,
       ("regNumberAway", IndexType.Ascending)
     ))
 
-    matchDao.ensureIndex(Seq(
+    val f3 = matchDao.ensureIndex(Seq(
       ("regNumberHome", IndexType.Ascending)
     ))
 
-    matchDao.ensureIndex(Seq(
+    val f4 = matchDao.ensureIndex(Seq(
       ("regNumberAway", IndexType.Ascending)
     ))
+
+    Future.sequence(List(f1, f2, f3, f4))
   }
 
   ensureIndexes().andThen { case Success(_) =>
+    Logger.info("Current season: 1819")
     if (config.getBoolean("polling.disabled")) {
       Logger.info("Polling is disabled")
     } else {
@@ -193,16 +195,23 @@ class ImportService @Inject()(reactiveMongoApi: ReactiveMongoApi,
       Logger.info(s"scheduling polling interval to $interval")
 
       var delay: Int = 0
-      val spread: FiniteDuration = if (interval / regionService.regions.size > 10.seconds) {
-        10.seconds
+      val spread: FiniteDuration = if (interval / regionService.regions.size > 40.seconds) {
+        40.seconds
       }
       else {
         interval / regionService.regions.size
       }
 
+      Logger.info(s"spread = $spread")
+
+
       regionService.regions.foreach { region: Region =>
         val rankingsDelay = delay * spread
+        //        val rankingsDelay = 10.seconds
         val matchesDelay = (delay * spread) + (spread / 2)
+        //        val matchesDelay = 10.seconds
+        //        Logger.info(s"rankingsDelay = $rankingsDelay")
+        //        Logger.info(s"matchesDelay = $matchesDelay")
         system.scheduler.schedule(rankingsDelay, interval, importActorRef, ImportRankings(region))
         system.scheduler.schedule(matchesDelay, interval, importActorRef, ImportMatches(region))
         delay = delay + 1
