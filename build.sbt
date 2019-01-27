@@ -1,7 +1,7 @@
 name := """footbalisto-api"""
 organization := "footbalisto"
 
-version := "1.1-SNAPSHOT"
+version := "1.2"
 
 lazy val root = (project in file(".")).enablePlugins(PlayScala)
 
