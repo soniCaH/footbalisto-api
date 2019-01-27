@@ -38,13 +38,13 @@ object Match {
     Match(
       season = "1819",
       region = region.shortName,
-      division = line(0).trim(),
+      division = line(0).trim,
       dateTime = dateParser.parse(s"${line(1)} ${line(2)}"), //DateTimeFormat.forPattern("dd/MM/yyyy HH:mm").parseDateTime(s"${line(1)} ${line(2)}"),
-      home = line(3).trim(),
-      away = line(4).trim(),
+      home = line(3).trim,
+      away = line(4).trim,
       resultHome = safeStringToLong(line(5).trim()),
       resultAway = safeStringToLong(line(6).trim()),
-      status = line(7).trim(),
+      status = line(7).trim,
       matchDay = line(8).toInt,
       regNumberHome = line(9),
       regNumberAway = line(10)

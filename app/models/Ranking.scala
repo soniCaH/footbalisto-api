@@ -29,9 +29,9 @@ object Ranking {
     Ranking(
       season = "1819",
       region = region.shortName,
-      division = line(0),
+      division = line(0).trim,
       position = line(1).toInt,
-      team = line(2),
+      team = line(2).trim,
       matches = line(3).toInt,
       wins = line(4).toInt,
       losses = line(5).toInt,
@@ -39,7 +39,7 @@ object Ranking {
       goalsPro = line(7).toInt,
       goalsAgainst = line(8).toInt,
       points = line(9).toInt,
-      period = line(10)
+      period = line(10).trim
     )
   }
 

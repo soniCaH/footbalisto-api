@@ -18,10 +18,14 @@ import play.api.libs.json.Json
 import play.api.libs.ws._
 import play.api.mvc._
 import play.modules.reactivemongo.{ReactiveMongoApi, ReactiveMongoComponents}
+import reactivemongo.api.Cursor
+import reactivemongo.api.collections.bson.BSONCollection
+import reactivemongo.bson
 import reactivemongo.bson.Macros.handler
-import reactivemongo.bson.{BSONDocumentHandler, BSONValue, document}
+import reactivemongo.bson.{BSONDocument, BSONDocumentHandler, BSONString, BSONValue, document}
 import security.Secured
 import services.{ImportService, MongoService, RegionService, UserService}
+import utils.EditDistance
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -90,6 +94,22 @@ class ApiController @Inject()(langs: Langs, messagesApi: MessagesApi,
       document("season" -> season, "region" -> region, "division" -> division, "period" -> period)
     ).map { rankings: Seq[Ranking] =>
       Ok(Json.toJson(rankings))
+    }
+  }
+
+  def divisionsForTeam(season: String, region: String, team: String): Action[AnyContent] = Action.async { implicit request: Request[AnyContent] =>
+    matchesDao.distinct(
+      "division", Option(document("season" -> season, "region" -> region, "$or" -> bson.array(document("regNumberHome" -> team), document("regNumberAway" -> team))))
+    ).map { s: List[String] =>
+      Ok(Json.toJson(s))
+    }
+  }
+
+  def matchesForTeamAndDivision(season: String, region: String, team: String, division: String): Action[AnyContent] = Action.async { implicit request: Request[AnyContent] =>
+    matchesDao.find(
+      document("season" -> season, "region" -> region, "division" -> division, "$or" -> bson.array(document("regNumberHome" -> team), document("regNumberAway" -> team)))
+    ).map { matches: Seq[Match] =>
+      Ok(Json.toJson(matches))
     }
   }
 
@@ -264,12 +284,75 @@ class ApiController @Inject()(langs: Langs, messagesApi: MessagesApi,
   }
 
   def users() = Action.async {
-
     userService.findAll().map { users =>
       Ok(Json.toJson(users))
-
     }
+  }
 
+  def test() = Action.async {
+    reactiveMongoApi.database.map(_.collection("matches")).flatMap { collection: BSONCollection =>
+      import collection.BatchCommands.AggregationFramework.{AddFieldToSet, Group}
+      collection.aggregatorContext[BSONDocument](Group(BSONString("$regNumberHome"))("teamNames" -> AddFieldToSet("home")))
+        .prepared.cursor
+        .collect[List](-1, Cursor.FailOnError[List[BSONDocument]]())
+        .map { documentList =>
+          for {
+            document <- documentList
+            regNumber: String <- document.getAs[String]("_id")
+            teamNames: List[String] <- document.getAs[List[String]]("teamNames")
 
+          } yield (regNumber, teamNames.minBy(_.length))
+        }
+    }.map { regNumberToTeamName =>
+      println("test")
+      Ok(Json.toJson(regNumberToTeamName))
+    }
+  }
+
+  def meta(season: String, region: String, division: String, regNumber: String) = Action.async {
+    val x = for {
+      rankings <- rankingsDao.find(document("season" -> season, "region" -> region, "division" -> division))
+      matches <- matchesDao.find(
+        document(
+          "season" -> season,
+          "division" -> division,
+          "$or" -> reactivemongo.bson.array(
+            document("regNumberHome" -> regNumber),
+            document("regNumberAway" -> regNumber)
+          )))
+
+    } yield {
+      val teamNameFromMatches = matches.find(_.regNumberHome == regNumber).map(_.home).orElse(matches.find(_.regNumberAway == regNumber).map(_.away))
+
+      val nextMatch = matches.sortBy(_.dateTime).find(_.dateTime.after(new Date()))
+      val previousMatch = matches.sortBy(_.dateTime).reverse.find(_.dateTime.before(new Date()))
+
+      Json.obj(
+        "ranking" -> rankings.sortBy(ranking => EditDistance.editDist(ranking.team, teamNameFromMatches.getOrElse(""))).headOption,
+        "next" -> nextMatch.map { nm =>
+          Json.obj(
+            "side" -> (if (nm.regNumberHome == regNumber) "home" else "away"),
+            "opponent" -> Json.obj(
+              "team" -> (if (nm.regNumberHome == regNumber) nm.away else nm.home),
+              "regNumber" -> (if (nm.regNumberHome == regNumber) nm.regNumberAway else nm.regNumberHome),
+              "ranking" -> rankings.sortBy(ranking => EditDistance.editDist(ranking.team, if (nm.regNumberHome == regNumber) nm.away else nm.home)).headOption
+            ),
+            "match" -> nm
+          )
+        },
+        "previous" -> previousMatch.map { pm =>
+          Json.obj(
+            "side" -> (if (pm.regNumberHome == regNumber) "home" else "away"),
+            "opponent" -> Json.obj(
+              "team" -> (if (pm.regNumberHome == regNumber) pm.away else pm.home),
+              "regNumber" -> (if (pm.regNumberHome == regNumber) pm.regNumberAway else pm.regNumberHome),
+              "ranking" -> rankings.sortBy(ranking => EditDistance.editDist(ranking.team, if (pm.regNumberHome == regNumber) pm.away else pm.home)).headOption
+            ),
+            "match" -> pm
+          )
+        },
+      )
+    }
+    x.map(y => Ok(y))
   }
 }
