@@ -180,7 +180,7 @@ class ImportService @Inject()(reactiveMongoApi: ReactiveMongoApi,
   }
 
   ensureIndexes().andThen { case Success(_) =>
-    Logger.info("Current season: 1819")
+    Logger.info("Current season: 1920")
     if (config.getBoolean("polling.disabled")) {
       Logger.info("Polling is disabled")
     } else {

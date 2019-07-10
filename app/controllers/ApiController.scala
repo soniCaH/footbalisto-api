@@ -63,7 +63,7 @@ class ApiController @Inject()(langs: Langs, messagesApi: MessagesApi,
   private val matchesDao: MongoService[Match] = new MongoService[Match](reactiveMongoApi.database, "matches")
 
   def seasons() = Action {
-    Ok(Json.toJson(List(Map("name" -> "1718"), Map("name" -> "1819"))))
+    Ok(Json.toJson(List(Map("name" -> "1718"), Map("name" -> "1819"), Map("name" -> "1920"))))
   }
 
   def availableRankingsForRegion(season: String, region: String): Action[AnyContent] = Action.async { implicit request: Request[AnyContent] =>
